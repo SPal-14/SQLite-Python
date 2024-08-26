@@ -56,6 +56,9 @@ def getMeta():
     # print(f"number of tables: {len(sqlite_schema_rows)}")
 if command == ".dbinfo":
     print(f"number of tables: {len(getMeta())}")
+    with open(database_file_path, "rb") as database_file:
+        page_size: int = int.from_bytes(database_file.read(2), byteorder="big")
+        print(f"database page size: {page_size}")
 elif command == ".tables":
     print(" ".join([n["name"].decode("utf-8") for n in getMeta()]))
 else:
