@@ -37,15 +37,19 @@ def parse_varint(file):
 
 def parse_record(file, num_columns):
     """Simple parser for a record with the given number of columns."""
-    # Parse the payload length (which is a varint)
     _payload_length = parse_varint(file)
 
-    # For simplicity, let's assume each column is stored as a string
     record = []
     for _ in range(num_columns):
         column_length = parse_varint(file)
         column_value = file.read(column_length)
-        record.append(column_value)
+        try:
+            # Attempt to decode as UTF-8
+            decoded_value = column_value.decode("utf-8")
+        except UnicodeDecodeError:
+            # If decoding fails, keep the raw bytes
+            decoded_value = column_value
+        record.append(decoded_value)
     return record
 
 if command == ".dbinfo" or command == ".tables":
@@ -82,7 +86,11 @@ if command == ".dbinfo" or command == ".tables":
             print(f"number of tables: {len(sqlite_schema_rows)}")
         elif command == ".tables":
             for table in sqlite_schema_rows:
-                print(table["tbl_name"].decode("utf-8"), end=" ")
+                # Ensure table name is correctly decoded before printing
+                table_name = table["tbl_name"]
+                if isinstance(table_name, bytes):
+                    table_name = table_name.decode("utf-8", errors="ignore")
+                print(table_name, end=" ")
             print()
 else:
     print(f"Invalid command: {command}")
