@@ -41,7 +41,6 @@ def parse_varint(file):
 def parse_record(file, num_columns):
     """Parse a record with the given number of columns."""
     _payload_length = parse_varint(file)
-
     record = []
     for _ in range(num_columns):
         column_length = parse_varint(file)
@@ -50,7 +49,7 @@ def parse_record(file, num_columns):
             # Attempt to decode as UTF-8
             decoded_value = column_value.decode("utf-8")
         except UnicodeDecodeError:
-            # If decoding fails, keep the raw bytes (not common for SQLite schema)
+            # If decoding fails, ignore errors
             decoded_value = column_value.decode(errors="ignore")
         record.append(decoded_value.strip())
     return record
@@ -74,7 +73,6 @@ if command == ".dbinfo" or command == ".tables":
             rowid = parse_varint(database_file)
             record = parse_record(database_file, 5)
             
-            # Table contains columns: type, name, tbl_name, rootpage, sql
             if len(record) >= 3:  # Ensure we have at least tbl_name
                 sqlite_schema_rows.append(
                     {
@@ -89,8 +87,8 @@ if command == ".dbinfo" or command == ".tables":
         if command == ".dbinfo":
             print(f"number of tables: {len(sqlite_schema_rows)}")
         elif command == ".tables":
-            # Extract only table names and print them
-            table_names = [table["tbl_name"] for table in sqlite_schema_rows if table["tbl_name"]]
+            # Extract and print only table names
+            table_names = [table["tbl_name"].strip() for table in sqlite_schema_rows if table["tbl_name"]]
             print(" ".join(table_names))
 else:
     print(f"Invalid command: {command}")
