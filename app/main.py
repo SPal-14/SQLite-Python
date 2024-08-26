@@ -37,7 +37,7 @@ def parse_varint(file):
     return value
 
 def parse_record(file, num_columns):
-    """Parse a record with the given number of columns."""
+    """Simple parser for a record with the given number of columns."""
     _payload_length = parse_varint(file)
 
     record = []
@@ -45,9 +45,11 @@ def parse_record(file, num_columns):
         column_length = parse_varint(file)
         column_value = file.read(column_length)
         try:
-            decoded_value = column_value.decode("utf-8", errors="ignore").strip()
+            # Attempt to decode as UTF-8
+            decoded_value = column_value.decode("utf-8")
         except UnicodeDecodeError:
-            decoded_value = None
+            # If decoding fails, keep the raw bytes
+            decoded_value = column_value
         record.append(decoded_value)
     return record
 if command == ".dbinfo" or ".tables":
