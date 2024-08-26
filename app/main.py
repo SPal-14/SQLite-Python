@@ -57,6 +57,7 @@ def getMeta():
 if command == ".dbinfo":
     print(f"number of tables: {len(getMeta())}")
     with open(database_file_path, "rb") as database_file:
+        database_file.seek(16)
         page_size: int = int.from_bytes(database_file.read(2), byteorder="big")
         print(f"database page size: {page_size}")
 elif command == ".tables":
