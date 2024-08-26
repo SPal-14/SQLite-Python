@@ -36,7 +36,7 @@ def parse_varint(file):
     return value
 
 def parse_record(file, num_columns):
-    """Simple parser for a record with the given number of columns."""
+    """Parse a record with the given number of columns."""
     _payload_length = parse_varint(file)
 
     record = []
@@ -50,44 +50,47 @@ def parse_record(file, num_columns):
         record.append(decoded_value)
     return record
 
+def extract_table_names(database_file, page_header):
+    """Extract table names from the SQLite database file."""
+    database_file.seek(100 + 8)  # Skip the database header & b-tree page header, get to the cell pointer array
+    
+    cell_pointers = [
+        int.from_bytes(database_file.read(2), "big")
+        for _ in range(page_header.number_of_cells)
+    ]
+    sqlite_schema_rows = []
+    
+    for cell_pointer in cell_pointers:
+        database_file.seek(cell_pointer)
+        _number_of_bytes_in_payload = parse_varint(database_file)
+        rowid = parse_varint(database_file)
+        record = parse_record(database_file, 5)
+        
+        # Ensure all columns are valid text strings
+        if len(record) == 5:
+            sqlite_schema_rows.append(
+                {
+                    "type": record[0],
+                    "name": record[1],
+                    "tbl_name": record[2],
+                    "rootpage": record[3],
+                    "sql": record[4],
+                }
+            )
+    
+    return sqlite_schema_rows
+
 if command == ".dbinfo" or command == ".tables":
     with open(database_file_path, "rb") as database_file:
         database_file.seek(100)  # Skip the header section
         page_header = PageHeader.parse_from(database_file)
-        database_file.seek(100 + 8)  # Skip the database header & b-tree page header, get to the cell pointer array
         
-        cell_pointers = [
-            int.from_bytes(database_file.read(2), "big")
-            for _ in range(page_header.number_of_cells)
-        ]
-        sqlite_schema_rows = []
-        
-        # Each of these cells represents a row in the sqlite_schema table.
-        for cell_pointer in cell_pointers:
-            database_file.seek(cell_pointer)
-            _number_of_bytes_in_payload = parse_varint(database_file)
-            rowid = parse_varint(database_file)
-            record = parse_record(database_file, 5)
-            
-            # Ensure all columns are valid text strings
-            if all(record):
-                sqlite_schema_rows.append(
-                    {
-                        "type": record[0],
-                        "name": record[1],
-                        "tbl_name": record[2],
-                        "rootpage": record[3],
-                        "sql": record[4],
-                    }
-                )
+        sqlite_schema_rows = extract_table_names(database_file, page_header)
         
         if command == ".dbinfo":
             print(f"number of tables: {len(sqlite_schema_rows)}")
         elif command == ".tables":
-            for table in sqlite_schema_rows:
-                table_name = table["tbl_name"]
-                if table_name and isinstance(table_name, str):
-                    print(table_name, end=" ")
-            print()
+            table_names = [table["tbl_name"].decode("utf-8", errors="ignore") for table in sqlite_schema_rows if table["tbl_name"]]
+            print(" ".join(table_names))
 else:
     print(f"Invalid command: {command}")
