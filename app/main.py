@@ -44,11 +44,9 @@ def parse_record(file, num_columns):
         column_length = parse_varint(file)
         column_value = file.read(column_length)
         try:
-            # Attempt to decode as UTF-8
-            decoded_value = column_value.decode("utf-8")
+            decoded_value = column_value.decode("utf-8", errors="ignore").strip()
         except UnicodeDecodeError:
-            # If decoding fails, keep the raw bytes
-            decoded_value = column_value
+            decoded_value = None
         record.append(decoded_value)
     return record
 
@@ -71,26 +69,25 @@ if command == ".dbinfo" or command == ".tables":
             rowid = parse_varint(database_file)
             record = parse_record(database_file, 5)
             
-            # Table contains columns: type, name, tbl_name, rootpage, sql
-            sqlite_schema_rows.append(
-                {
-                    "type": record[0],
-                    "name": record[1],
-                    "tbl_name": record[2],
-                    "rootpage": record[3],
-                    "sql": record[4],
-                }
-            )
+            # Ensure all columns are valid text strings
+            if all(record):
+                sqlite_schema_rows.append(
+                    {
+                        "type": record[0],
+                        "name": record[1],
+                        "tbl_name": record[2],
+                        "rootpage": record[3],
+                        "sql": record[4],
+                    }
+                )
         
         if command == ".dbinfo":
             print(f"number of tables: {len(sqlite_schema_rows)}")
         elif command == ".tables":
             for table in sqlite_schema_rows:
-                # Ensure table name is correctly decoded before printing
                 table_name = table["tbl_name"]
-                if isinstance(table_name, bytes):
-                    table_name = table_name.decode("utf-8", errors="ignore")
-                print(table_name, end=" ")
+                if table_name and isinstance(table_name, str):
+                    print(table_name, end=" ")
             print()
 else:
     print(f"Invalid command: {command}")
