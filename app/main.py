@@ -53,7 +53,7 @@ def getMeta():
                 }
             )
     return sqlite_schema_rows
-    print(f"number of tables: {len(sqlite_schema_rows)}")
+    # print(f"number of tables: {len(sqlite_schema_rows)}")
 if command == ".dbinfo":
     print(f"number of tables: {len(getMeta())}")
 elif command == ".tables":
