@@ -1,8 +1,9 @@
 import sys
 from dataclasses import dataclass
-# import sqlparse - available if you need it!
+
 database_file_path = sys.argv[1]
 command = sys.argv[2]
+
 @dataclass(init=False)
 class PageHeader:
     page_type: int
@@ -10,6 +11,7 @@ class PageHeader:
     number_of_cells: int
     start_of_content_area: int
     fragmented_free_bytes: int
+
     @classmethod
     def parse_from(cls, database_file):
         """
@@ -22,7 +24,7 @@ class PageHeader:
         instance.start_of_content_area = int.from_bytes(database_file.read(2), "big")
         instance.fragmented_free_bytes = int.from_bytes(database_file.read(1), "big")
         return instance
-    
+
 def parse_varint(file):
     """Parse a variable-length integer (varint) from the file."""
     value = 0
@@ -37,7 +39,7 @@ def parse_varint(file):
     return value
 
 def parse_record(file, num_columns):
-    """Simple parser for a record with the given number of columns."""
+    """Parse a record with the given number of columns."""
     _payload_length = parse_varint(file)
 
     record = []
@@ -48,28 +50,30 @@ def parse_record(file, num_columns):
             # Attempt to decode as UTF-8
             decoded_value = column_value.decode("utf-8")
         except UnicodeDecodeError:
-            # If decoding fails, keep the raw bytes
-            decoded_value = column_value
+            # If decoding fails, keep the raw bytes (not common for SQLite schema)
+            decoded_value = column_value.decode(errors="ignore")
         record.append(decoded_value)
     return record
-if command == ".dbinfo" or ".tables":
+
+if command == ".dbinfo" or command == ".tables":
     with open(database_file_path, "rb") as database_file:
         database_file.seek(100)  # Skip the header section
         page_header = PageHeader.parse_from(database_file)
-        database_file.seek(
-            100 + 8
-        )  # Skip the database header & b-tree page header, get to the cell pointer array
+        database_file.seek(100 + 8)  # Skip the database header & b-tree page header, get to the cell pointer array
+        
         cell_pointers = [
             int.from_bytes(database_file.read(2), "big")
             for _ in range(page_header.number_of_cells)
         ]
         sqlite_schema_rows = []
+        
         # Each of these cells represents a row in the sqlite_schema table.
         for cell_pointer in cell_pointers:
             database_file.seek(cell_pointer)
             _number_of_bytes_in_payload = parse_varint(database_file)
             rowid = parse_varint(database_file)
             record = parse_record(database_file, 5)
+            
             # Table contains columns: type, name, tbl_name, rootpage, sql
             sqlite_schema_rows.append(
                 {
@@ -80,12 +84,13 @@ if command == ".dbinfo" or ".tables":
                     "sql": record[4],
                 }
             )
-        #print(f"number of tables: {len(sqlite_schema_rows)}")
+        
         if command == ".dbinfo":
             print(f"number of tables: {len(sqlite_schema_rows)}")
         elif command == ".tables":
+            # Print each table name
             for table in sqlite_schema_rows:
-                print(table["tbl_name"].decode("utf-8"), end=" ")
+                print(table["tbl_name"], end=" ")
             print()
 else:
     print(f"Invalid command: {command}")
