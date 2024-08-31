@@ -11,12 +11,26 @@ def parse_column_value(stream, serial_type):
         # Text encoding
         n_bytes = (serial_type - 13) // 2
         return stream.read(n_bytes)
+    elif serial_type == 0:
+        return None
     elif serial_type == 1:
         # 8 bit twos-complement integer
         return int.from_bytes(stream.read(1), "big")
-    elif serial_type == 0:
-        # 8 bit twos-complement integer
-        return None
+    elif serial_type == 2:
+        # Value is a big-endian 16-bit twos-complement integer.
+        return int.from_bytes(stream.read(2), "big")
+    elif serial_type == 3:
+        # Value is a big-endian 24-bit twos-complement integer.
+        return int.from_bytes(stream.read(3), "big")
+    elif serial_type == 4:
+        # Value is a big-endian 32-bit twos-complement integer.
+        return int.from_bytes(stream.read(4), "big")
+    elif serial_type == 5:
+        return int.from_bytes(stream.read(6), "big")
+    elif serial_type == 6:
+        return int.from_bytes(stream.read(8), "big")
+    elif serial_type == 9:
+        return 1
     else:
         # There are more cases to handle, fill this in as you encounter them.
         raise Exception(f"Unhandled serial_type {serial_type}")

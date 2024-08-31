@@ -304,179 +304,379 @@
 #         return "|".join(list(row.values()))
 #     print("\n".join(list(map(printResult, result))))
 
-import re
+# import re
+# import sys
+# from dataclasses import dataclass
+# # import sqlparse - available if you need it!
+# database_file_path = sys.argv[1]
+# command = sys.argv[2]
+# IS_FIRST_BIT_ZERO_MASKED = 0x80  # 0b10000000
+# LAST_SEVEN_BITS_MASK = 0x7F  # 0b01111111
+# def starts_with_zero(byte):
+#     return (byte & IS_FIRST_BIT_ZERO_MASKED) == 0
+# def usable_value(usable_size, byte):
+#     return byte if usable_size == 8 else byte & LAST_SEVEN_BITS_MASK
+# def read_usable_bytes(stream):
+#     usable_bytes = []
+#     for i in range(8):
+#         byte = int.from_bytes(stream.read(1), byteorder="big")
+#         usable_bytes.append(byte)
+#         if starts_with_zero(byte):
+#             break
+#     return usable_bytes
+# # def read_varint(stream):
+# #     usable_bytes = read_usable_bytes(stream)
+# #     value = 0
+# #     for index, usable_byte in enumerate(usable_bytes):
+# #         usable_size = 8 if index == 8 else 7
+# #         shifted = value << usable_size
+# #         value = shifted + usable_value(usable_size, usable_byte)
+# #     return value
+# def read_varint(stream):
+#     IS_FIRST_BIT_ZERO_MASKED = 0x80  # 0b10000000
+#     LAST_SEVEN_BITS_MASK = 0x7F  # 0b01111111
+#     value = 0
+#     for _ in range(9):
+#         byte = int.from_bytes(stream.read(1), byteorder="big")
+#         value = value << 7 | (byte & LAST_SEVEN_BITS_MASK)
+#         if byte & IS_FIRST_BIT_ZERO_MASKED == 0:
+#             break
+#     return value
+# def parse_column(stream, serial_type):
+#     if serial_type >= 13 and serial_type % 2 == 1:
+#         n_bytes = (serial_type - 13) // 2
+#         return stream.read(n_bytes).decode()
+#     if serial_type >= 12 and serial_type % 2 == 0:
+#         n_bytes = (serial_type - 12) // 2
+#         return stream.read(n_bytes).decode()
+#     if serial_type == 1:
+#         return int.from_bytes(stream.read(1), byteorder="big")
+#     if serial_type == 0:
+#         return None
+#     if serial_type == 7 or serial_type == 6:
+#         return int.from_bytes(stream.read(8), byteorder="big")
+#     raise Exception(f"Unknown Serial Type {serial_type}")
+# def parse_record(stream, column_count):
+#     serial_types = [read_varint(stream) for i in range(column_count)]
+#     return [parse_column(stream, serial_type) for serial_type in serial_types]
+# def table_schema(database_file):
+#     database_file.seek(100)
+#     # print(database_file.tell())
+#     page_type = int.from_bytes(database_file.read(1), byteorder="big")
+#     free_block = int.from_bytes(database_file.read(2), byteorder="big")
+#     cell_count = int.from_bytes(database_file.read(2), byteorder="big")
+#     content_start = int.from_bytes(database_file.read(2), byteorder="big")
+#     fragmented_free_bytes = int.from_bytes(database_file.read(1), byteorder="big")
+#     cell_pointers = [
+#         int.from_bytes(database_file.read(2), byteorder="big")
+#         for _ in range(cell_count)
+#     ]
+#     # print(content_start, cell_pointers)
+#     # print(cell_pointers)
+#     tables = []
+#     for cell_pointer in cell_pointers:
+#         database_file.seek(cell_pointer)
+#         payload_size = read_varint(database_file)
+#         row_id = read_varint(database_file)
+#         _bytes_in_header = read_varint(database_file)
+#         cols = parse_record(database_file, 5)
+#         sqlite_schema = {
+#             "type": cols[0],
+#             "name": cols[1],
+#             "tbl_name": cols[2],
+#             "rootpage": cols[3],
+#             "sql": cols[4],
+#         }
+#         tables.append(sqlite_schema)
+#     return tables
+# if command == ".dbinfo":
+#     with open(database_file_path, "rb") as database_file:
+#         # You can use print statements as follows for debugging, they'll be visible when running tests.
+#         print("Logs from your program will appear here!")
+#         # Uncomment this to pass the first stage
+#         database_file.seek(16)  # Skip the first 16 bytes of the header
+#         page_size = int.from_bytes(database_file.read(2), byteorder="big")
+#         database_file.seek(103)
+#         cell_count = int.from_bytes(database_file.read(2), byteorder="big")
+#         print(f"database page size: {page_size}")
+#         print(f"number of tables: {cell_count}")
+# elif command == ".tables":
+#     with open(database_file_path, "rb") as database_file:
+#         tables = table_schema(database_file)
+#         print(" ".join([x["name"] for x in tables if x["name"] != "sqlite_sequence"]))
+# elif "select" in command.lower():
+#     has_count = "count(" in command.lower()
+#     select_cols = command.lower().split("from")[0].replace("select ", "").split(",")
+#     select_cols = [col.strip() for col in select_cols if len(col.strip()) > 0]
+#     #table_name = command.lower().split(" ")[-1].replace("\\n", "")
+#     table_name = (
+#         command.lower().split("from")[1].strip().split(" ")[0].replace("\\n", "")
+#     )
+#     with open(database_file_path, "rb") as database_file:
+#         database_file.seek(16)
+#         page_size = int.from_bytes(database_file.read(2), byteorder="big")
+#         tables = table_schema(database_file)
+#         table_info = [table for table in tables if table["name"] == table_name][0]
+#         schema_cols = (
+#             table_info["sql"]
+#             .replace("\n", "")
+#             .replace("\t", "")
+#             .split("(")[1]
+#             .split(")")[0]
+#             .split(",")
+#         )
+#         #schema_cols = [col.split(" ")[0].strip() for col in schema_cols]
+#         schema_cols = [col.strip().split(" ")[0].strip() for col in schema_cols]
+#         if table_info is None:
+#             print("Table Not Found")
+#         table_cell_offset = (table_info["rootpage"] - 1) * page_size
+#         database_file.seek(table_cell_offset)
+#         page_type = int.from_bytes(database_file.read(1), byteorder="big")
+#         free_block = int.from_bytes(database_file.read(2), byteorder="big")
+#         cell_count = int.from_bytes(database_file.read(2), byteorder="big")
+#         content_start = int.from_bytes(database_file.read(2), byteorder="big")
+#         fragmented_free_bytes = int.from_bytes(database_file.read(1), byteorder="big")
+#         # right_most_pointer = int.from_bytes(database_file.read(4), byteorder="big")
+#         if has_count:
+#             print(cell_count)
+#             exit()
+#         # print(table_info['sql'])
+#         # print(schema_cols)
+#         cell_pointers = [
+#             table_cell_offset + int.from_bytes(database_file.read(2), byteorder="big")
+#             for _ in range(cell_count)
+#         ]
+#         # print(content_start, cell_pointers)
+#         if "where" in command.lower():
+#             ccolumn, cvalue = [
+#                 col.strip() for col in command.split("where")[1].split("=")
+#             ]
+#         rows = []
+#         for cell_pointer in cell_pointers:
+#             database_file.seek(cell_pointer)
+#             payload_size = read_varint(database_file)
+#             row_id = read_varint(database_file)
+#             _bytes_in_header = read_varint(database_file)
+#             cols = parse_record(database_file, len(schema_cols))
+#             output = []
+#             show_row = not "where" in command.lower()
+#             for select_col in select_cols:
+#                 try:
+#                     col_index = schema_cols.index(select_col)
+#                     # print(cols[col_index])
+#                     #output.append(cols[col_index])
+#                     value = cols[col_index]
+#                     # print(value, cvalue)
+#                     if "where" in command.lower():
+#                         # print(ccolumn, select_col, value, cvalue)
+#                         if ccolumn == select_col and value == cvalue.replace("'", ""):
+#                             show_row = True
+#                     output.append(value)
+#                 except:
+#                     print(f"Error: in prepare, no such column: {select_col}")
+#                     exit()
+#             #print("|".join(output))
+#             if show_row:
+#                 print("|".join(output))
+# else:
+#     print(f"Invalid command: {command}")
+
 import sys
 from dataclasses import dataclass
-# import sqlparse - available if you need it!
+import sqlparse
+from .record_parser import parse_record
+from .varint_parser import parse_varint
 database_file_path = sys.argv[1]
 command = sys.argv[2]
-IS_FIRST_BIT_ZERO_MASKED = 0x80  # 0b10000000
-LAST_SEVEN_BITS_MASK = 0x7F  # 0b01111111
-def starts_with_zero(byte):
-    return (byte & IS_FIRST_BIT_ZERO_MASKED) == 0
-def usable_value(usable_size, byte):
-    return byte if usable_size == 8 else byte & LAST_SEVEN_BITS_MASK
-def read_usable_bytes(stream):
-    usable_bytes = []
-    for i in range(8):
-        byte = int.from_bytes(stream.read(1), byteorder="big")
-        usable_bytes.append(byte)
-        if starts_with_zero(byte):
-            break
-    return usable_bytes
-# def read_varint(stream):
-#     usable_bytes = read_usable_bytes(stream)
-#     value = 0
-#     for index, usable_byte in enumerate(usable_bytes):
-#         usable_size = 8 if index == 8 else 7
-#         shifted = value << usable_size
-#         value = shifted + usable_value(usable_size, usable_byte)
-#     return value
-def read_varint(stream):
-    IS_FIRST_BIT_ZERO_MASKED = 0x80  # 0b10000000
-    LAST_SEVEN_BITS_MASK = 0x7F  # 0b01111111
-    value = 0
-    for _ in range(9):
-        byte = int.from_bytes(stream.read(1), byteorder="big")
-        value = value << 7 | (byte & LAST_SEVEN_BITS_MASK)
-        if byte & IS_FIRST_BIT_ZERO_MASKED == 0:
-            break
-    return value
-def parse_column(stream, serial_type):
-    if serial_type >= 13 and serial_type % 2 == 1:
-        n_bytes = (serial_type - 13) // 2
-        return stream.read(n_bytes).decode()
-    if serial_type >= 12 and serial_type % 2 == 0:
-        n_bytes = (serial_type - 12) // 2
-        return stream.read(n_bytes).decode()
-    if serial_type == 1:
-        return int.from_bytes(stream.read(1), byteorder="big")
-    if serial_type == 0:
-        return None
-    if serial_type == 7 or serial_type == 6:
-        return int.from_bytes(stream.read(8), byteorder="big")
-    raise Exception(f"Unknown Serial Type {serial_type}")
-def parse_record(stream, column_count):
-    serial_types = [read_varint(stream) for i in range(column_count)]
-    return [parse_column(stream, serial_type) for serial_type in serial_types]
-def table_schema(database_file):
-    database_file.seek(100)
-    # print(database_file.tell())
-    page_type = int.from_bytes(database_file.read(1), byteorder="big")
-    free_block = int.from_bytes(database_file.read(2), byteorder="big")
-    cell_count = int.from_bytes(database_file.read(2), byteorder="big")
-    content_start = int.from_bytes(database_file.read(2), byteorder="big")
-    fragmented_free_bytes = int.from_bytes(database_file.read(1), byteorder="big")
-    cell_pointers = [
-        int.from_bytes(database_file.read(2), byteorder="big")
-        for _ in range(cell_count)
-    ]
-    # print(content_start, cell_pointers)
-    # print(cell_pointers)
-    tables = []
-    for cell_pointer in cell_pointers:
-        database_file.seek(cell_pointer)
-        payload_size = read_varint(database_file)
-        row_id = read_varint(database_file)
-        _bytes_in_header = read_varint(database_file)
-        cols = parse_record(database_file, 5)
-        sqlite_schema = {
-            "type": cols[0],
-            "name": cols[1],
-            "tbl_name": cols[2],
-            "rootpage": cols[3],
-            "sql": cols[4],
-        }
-        tables.append(sqlite_schema)
-    return tables
-if command == ".dbinfo":
-    with open(database_file_path, "rb") as database_file:
-        # You can use print statements as follows for debugging, they'll be visible when running tests.
-        print("Logs from your program will appear here!")
-        # Uncomment this to pass the first stage
-        database_file.seek(16)  # Skip the first 16 bytes of the header
-        page_size = int.from_bytes(database_file.read(2), byteorder="big")
-        database_file.seek(103)
-        cell_count = int.from_bytes(database_file.read(2), byteorder="big")
-        print(f"database page size: {page_size}")
-        print(f"number of tables: {cell_count}")
-elif command == ".tables":
-    with open(database_file_path, "rb") as database_file:
-        tables = table_schema(database_file)
-        print(" ".join([x["name"] for x in tables if x["name"] != "sqlite_sequence"]))
-elif "select" in command.lower():
-    has_count = "count(" in command.lower()
-    select_cols = command.lower().split("from")[0].replace("select ", "").split(",")
-    select_cols = [col.strip() for col in select_cols if len(col.strip()) > 0]
-    #table_name = command.lower().split(" ")[-1].replace("\\n", "")
-    table_name = (
-        command.lower().split("from")[1].strip().split(" ")[0].replace("\\n", "")
-    )
-    with open(database_file_path, "rb") as database_file:
-        database_file.seek(16)
-        page_size = int.from_bytes(database_file.read(2), byteorder="big")
-        tables = table_schema(database_file)
-        table_info = [table for table in tables if table["name"] == table_name][0]
-        schema_cols = (
-            table_info["sql"]
-            .replace("\n", "")
-            .replace("\t", "")
-            .split("(")[1]
-            .split(")")[0]
-            .split(",")
+class SqliteFileParser:
+    def __init__(self, database_file_path):
+        self.database_file = open(database_file_path, "rb")
+        self.database_file.seek(16)
+        self.page_size = int.from_bytes(self.database_file.read(2), "big")
+        self.database_file.seek(28)
+        self.page_num = int.from_bytes(self.database_file.read(4), "big")
+        self.page_headers = self.read_pages()
+        self.sqlite_schema_rows = self.get_sqlite_schema_rows(
+            self.database_file, self.get_cell_pointers(self.page_headers[0])
         )
-        #schema_cols = [col.split(" ")[0].strip() for col in schema_cols]
-        schema_cols = [col.strip().split(" ")[0].strip() for col in schema_cols]
-        if table_info is None:
-            print("Table Not Found")
-        table_cell_offset = (table_info["rootpage"] - 1) * page_size
-        database_file.seek(table_cell_offset)
-        page_type = int.from_bytes(database_file.read(1), byteorder="big")
-        free_block = int.from_bytes(database_file.read(2), byteorder="big")
-        cell_count = int.from_bytes(database_file.read(2), byteorder="big")
-        content_start = int.from_bytes(database_file.read(2), byteorder="big")
-        fragmented_free_bytes = int.from_bytes(database_file.read(1), byteorder="big")
-        # right_most_pointer = int.from_bytes(database_file.read(4), byteorder="big")
-        if has_count:
-            print(cell_count)
-            exit()
-        # print(table_info['sql'])
-        # print(schema_cols)
-        cell_pointers = [
-            table_cell_offset + int.from_bytes(database_file.read(2), byteorder="big")
-            for _ in range(cell_count)
+    def get_cell_pointers(self, page_header):
+        #self.database_file.seek(page_header.offset + 8)
+        additional_offset = 4 if page_header.page_type in (2, 5) else 0
+        self.database_file.seek(page_header.offset + 8 + additional_offset)
+        return [
+            int.from_bytes(self.database_file.read(2), "big")
+            for _ in range(page_header.number_of_cells)
         ]
-        # print(content_start, cell_pointers)
-        if "where" in command.lower():
-            ccolumn, cvalue = [
-                col.strip() for col in command.split("where")[1].split("=")
-            ]
-        rows = []
+    def read_pages(self):
+        all_pages = []
+        self.database_file.seek(100)
+        curr_offset = 100
+        for i in range(self.page_num):
+            all_pages.append(PageHeader.parse_from(self.database_file, curr_offset))
+            curr_offset = self.database_file.seek(self.page_size * (i + 1))
+        return all_pages
+    def get_sqlite_schema_rows(self, database_file, cell_pointers):
+        sqlite_schema_rows = {}
+        # Each of these cells represents a row in the sqlite_schema table.
         for cell_pointer in cell_pointers:
             database_file.seek(cell_pointer)
-            payload_size = read_varint(database_file)
-            row_id = read_varint(database_file)
-            _bytes_in_header = read_varint(database_file)
-            cols = parse_record(database_file, len(schema_cols))
-            output = []
-            show_row = not "where" in command.lower()
-            for select_col in select_cols:
-                try:
-                    col_index = schema_cols.index(select_col)
-                    # print(cols[col_index])
-                    #output.append(cols[col_index])
-                    value = cols[col_index]
-                    # print(value, cvalue)
-                    if "where" in command.lower():
-                        # print(ccolumn, select_col, value, cvalue)
-                        if ccolumn == select_col and value == cvalue.replace("'", ""):
-                            show_row = True
-                    output.append(value)
-                except:
-                    print(f"Error: in prepare, no such column: {select_col}")
-                    exit()
-            #print("|".join(output))
-            if show_row:
-                print("|".join(output))
+            _number_of_bytes_in_payload = parse_varint(database_file)
+            rowid = parse_varint(database_file)
+            record = parse_record(database_file, 5)
+            # Table contains columns: type, name, tbl_name, rootpage, sql
+            sqlite_schema_rows[record[2].decode()] = {
+                "type": record[0].decode(),
+                "name": record[1].decode(),
+                "tbl_name": record[2].decode(),
+                "rootpage": record[3],
+                "sql": record[4].decode(),
+            }
+        return sqlite_schema_rows
+    def get_row_count(self, table):
+        table_rootpage = self.sqlite_schema_rows[table]["rootpage"]
+        table_page = self.page_headers[table_rootpage - 1]
+        """
+        self.database_file.seek(table_page.offset + 8)
+        cell_pointers = self.get_cell_pointers(table_page)
+        for pointer in cell_pointers:
+            self.database_file.seek(pointer + table_page.offset)
+            print(self.database_file.read(30))
+        """
+        print(table_page.number_of_cells)
+    def get_sql_info(self, sql_statement):
+        # separate out select, and where clause
+        # get: table, columns of interest, and table
+        columns = None
+        table = None
+        where = []
+        sql_tokens = sqlparse.parse(sql_statement)[0].tokens
+        for token in sql_tokens:
+            if isinstance(token, sqlparse.sql.IdentifierList) or isinstance(
+                token, sqlparse.sql.Function
+            ):
+                columns = str(token)
+            if isinstance(token, sqlparse.sql.Identifier):
+                if columns is None:
+                    columns = str(token)
+                else:
+                    table = str(token)
+            if isinstance(token, sqlparse.sql.Where):
+                for where_token in token.tokens:
+                    if isinstance(where_token, sqlparse.sql.Comparison):
+                        #where = str(where_token)
+                        for comp_token in where_token.tokens:
+                            if str(comp_token) != " ":
+                                where.append(str(comp_token))
+                            # if comp_token != sqlparse.sql.Whitespace:
+                            #    where.append(str(comp_token))
+        #return {"select": columns, "table": table, "where": where}
+        return {"select": columns, "table": table, "where": where if where else None}
+    def get_column_count(self, table):
+        create_sql = sqlparse.parse(self.sqlite_schema_rows[table]["sql"])
+        columns = create_sql[0][-1].tokens
+        total_columns = []
+        for token in columns:
+            if isinstance(token, sqlparse.sql.Identifier):
+                total_columns.append(str(token))
+            if isinstance(token, sqlparse.sql.IdentifierList):
+                for sub_token in token:
+                    if (
+                        isinstance(sub_token, sqlparse.sql.Identifier)
+                        and str(sub_token) != "autoincrement"
+                    ):
+                        total_columns.append(str(sub_token))
+        return total_columns
+    def get_records(self, table_page, columns):
+        cell_pointers = self.get_cell_pointers(table_page)
+        records = []
+        column_count = len(columns)
+        for pointer in cell_pointers:
+            self.database_file.seek(pointer + table_page.offset)
+            if table_page.page_type == 13:
+                total_bytes = parse_varint(self.database_file)
+                row_id = parse_varint(self.database_file)
+                record = parse_record(self.database_file, column_count)
+                record[0] = row_id
+                record = [c.decode() if isinstance(c, bytes) else c for c in record]
+                record = {columns[i]: record[i] for i in range(len(columns))}
+                records.append(record)
+            elif table_page.page_type == 5:
+                left_child_pointer = int.from_bytes(self.database_file.read(4), "big")
+                int_key = parse_varint(self.database_file)
+                records += self.get_records(
+                    self.page_headers[left_child_pointer - 1], columns
+                )
+            else:
+                print("NEW PAGE TYPE: " + table_page.page_type)
+        return records
+    def execute_sql(self, sql_statement):
+        sql_info = self.get_sql_info(sql_statement)
+        table = sql_info["table"]
+        if sql_info["select"].upper() == "COUNT(*)":
+            self.get_row_count(table)
+            return
+        columns = self.get_column_count(table)
+        column_count = len(columns)
+        table_rootpage = self.sqlite_schema_rows[table]["rootpage"]
+        table_page = self.page_headers[table_rootpage - 1]
+        self.database_file.seek(table_page.offset + 8)
+        # cell_pointers = self.get_cell_pointers(table_page)
+        # records = []
+        # for pointer in cell_pointers:
+        #     self.database_file.seek(pointer + table_page.offset)
+        #     # asssume this is a leaf file
+        #     total_bytes = parse_varint(self.database_file)
+        #     row_id = parse_varint(self.database_file)
+        #     record = parse_record(self.database_file, column_count)
+        #     record[0] = row_id
+        #     record = [c.decode() if isinstance(c, bytes) else c for c in record]
+        #     record = {columns[i]: record[i] for i in range(len(columns))}
+        #     records.append(record)
+        records = self.get_records(table_page, columns)
+        columns_of_interest = sql_info["select"].split(", ")
+        for i, record in enumerate(records):
+            total_row = []
+            if sql_info["where"] is None:
+                for col in columns_of_interest:
+                    total_row.append(str(record[col]))
+            else:
+                #comparison = sql_info["where"].split()
+                comparison = sql_info["where"]
+                comp_col = comparison[0]
+                comp_val = comparison[2].replace("'", "")
+                # assume this is an equality comparison
+                if record[comp_col] == comp_val:
+                    for col in columns_of_interest:
+                        total_row.append(str(record[col]))
+            if len(total_row) > 0:
+                print("|".join(total_row))
+@dataclass(init=False)
+class PageHeader:
+    page_type: int
+    first_free_block_start: int
+    number_of_cells: int
+    start_of_content_area: int
+    fragmented_free_bytes: int
+    offset: int
+    @classmethod
+    def parse_from(cls, database_file, offset):
+        """
+        Parses a page header as mentioned here: https://www.sqlite.org/fileformat2.html#b_tree_pages
+        """
+        instance = cls()
+        instance.offset = offset
+        instance.page_type = int.from_bytes(database_file.read(1), "big")
+        instance.first_free_block_start = int.from_bytes(database_file.read(2), "big")
+        instance.number_of_cells = int.from_bytes(database_file.read(2), "big")
+        instance.start_of_content_area = int.from_bytes(database_file.read(2), "big")
+        instance.fragmented_free_bytes = int.from_bytes(database_file.read(1), "big")
+        return instance
+sqllite_file_parser = SqliteFileParser(database_file_path)
+if command == ".dbinfo":
+    print("Logs from your program will appear here!")
+    print(f"number of tables: {len(sqllite_file_parser.sqlite_schema_rows)}")
+elif command == ".tables":
+    print(" ".join(sqllite_file_parser.sqlite_schema_rows.keys()))
 else:
-    print(f"Invalid command: {command}")
+    # assume this is "SELECT COUNT(*) FROM {table}
+    sqllite_file_parser.execute_sql(command)
