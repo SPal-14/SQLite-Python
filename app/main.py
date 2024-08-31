@@ -995,16 +995,12 @@ class PageHeader:
         return instance
 sqllite_file_parser = SqliteFileParser(database_file_path)
 if command == ".dbinfo":
-    print("Logs from your program will appear here!")
-    #print(f"number of tables: {len(sqllite_file_parser.sqlite_schema_rows)}")
-    table_count = len(
-        [
-            table
-            for table in sqllite_file_parser.sqlite_schema_rows
-            if sqllite_file_parser.sqlite_schema_rows[table]["type"] == "table"
-        ]
-    )
-    print(f"number of tables: {table_count}")
+    with open(database_file_path, "rb") as database_file:
+         database_file.seek(16)  # Skip the first 16 bytes of the header
+         page_size = int.from_bytes(database_file.read(2), byteorder="big")
+         database_file.seek(103)
+         table_amt = int.from_bytes(database_file.read(2), byteorder="big")
+         print(f"database page size: {page_size}\nnumber of tables: {table_amt}")
 elif command == ".tables":
     #print(" ".join(sqllite_file_parser.sqlite_schema_rows.keys()))
     tables = [
