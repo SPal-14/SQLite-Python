@@ -481,6 +481,210 @@
 # else:
 #     print(f"Invalid command: {command}")
 
+# import sys
+# from dataclasses import dataclass
+# import sqlparse
+# from .record_parser import parse_record
+# from .varint_parser import parse_varint
+# database_file_path = sys.argv[1]
+# command = sys.argv[2]
+# class SqliteFileParser:
+#     def __init__(self, database_file_path):
+#         self.database_file = open(database_file_path, "rb")
+#         self.database_file.seek(16)
+#         self.page_size = int.from_bytes(self.database_file.read(2), "big")
+#         self.database_file.seek(28)
+#         self.page_num = int.from_bytes(self.database_file.read(4), "big")
+#         self.page_headers = self.read_pages()
+#         self.sqlite_schema_rows = self.get_sqlite_schema_rows(
+#             self.database_file, self.get_cell_pointers(self.page_headers[0])
+#         )
+#     def get_cell_pointers(self, page_header):
+#         #self.database_file.seek(page_header.offset + 8)
+#         additional_offset = 4 if page_header.page_type in (2, 5) else 0
+#         self.database_file.seek(page_header.offset + 8 + additional_offset)
+#         return [
+#             int.from_bytes(self.database_file.read(2), "big")
+#             for _ in range(page_header.number_of_cells)
+#         ]
+#     def read_pages(self):
+#         all_pages = []
+#         self.database_file.seek(100)
+#         curr_offset = 100
+#         for i in range(self.page_num):
+#             all_pages.append(PageHeader.parse_from(self.database_file, curr_offset))
+#             curr_offset = self.database_file.seek(self.page_size * (i + 1))
+#         return all_pages
+#     def get_sqlite_schema_rows(self, database_file, cell_pointers):
+#         sqlite_schema_rows = {}
+#         # Each of these cells represents a row in the sqlite_schema table.
+#         for cell_pointer in cell_pointers:
+#             database_file.seek(cell_pointer)
+#             _number_of_bytes_in_payload = parse_varint(database_file)
+#             rowid = parse_varint(database_file)
+#             record = parse_record(database_file, 5)
+#             # Table contains columns: type, name, tbl_name, rootpage, sql
+#             sqlite_schema_rows[record[2].decode()] = {
+#                 "type": record[0].decode(),
+#                 "name": record[1].decode(),
+#                 "tbl_name": record[2].decode(),
+#                 "rootpage": record[3],
+#                 "sql": record[4].decode(),
+#             }
+#         return sqlite_schema_rows
+#     def get_row_count(self, table):
+#         table_rootpage = self.sqlite_schema_rows[table]["rootpage"]
+#         table_page = self.page_headers[table_rootpage - 1]
+#         """
+#         self.database_file.seek(table_page.offset + 8)
+#         cell_pointers = self.get_cell_pointers(table_page)
+#         for pointer in cell_pointers:
+#             self.database_file.seek(pointer + table_page.offset)
+#             print(self.database_file.read(30))
+#         """
+#         print(table_page.number_of_cells)
+#     def get_sql_info(self, sql_statement):
+#         # separate out select, and where clause
+#         # get: table, columns of interest, and table
+#         columns = None
+#         table = None
+#         where = []
+#         sql_tokens = sqlparse.parse(sql_statement)[0].tokens
+#         for token in sql_tokens:
+#             if isinstance(token, sqlparse.sql.IdentifierList) or isinstance(
+#                 token, sqlparse.sql.Function
+#             ):
+#                 columns = str(token)
+#             if isinstance(token, sqlparse.sql.Identifier):
+#                 if columns is None:
+#                     columns = str(token)
+#                 else:
+#                     table = str(token)
+#             if isinstance(token, sqlparse.sql.Where):
+#                 for where_token in token.tokens:
+#                     if isinstance(where_token, sqlparse.sql.Comparison):
+#                         #where = str(where_token)
+#                         for comp_token in where_token.tokens:
+#                             if str(comp_token) != " ":
+#                                 where.append(str(comp_token))
+#                             # if comp_token != sqlparse.sql.Whitespace:
+#                             #    where.append(str(comp_token))
+#         #return {"select": columns, "table": table, "where": where}
+#         return {"select": columns, "table": table, "where": where if where else None}
+#     def get_column_count(self, table):
+#         create_sql = sqlparse.parse(self.sqlite_schema_rows[table]["sql"])
+#         columns = create_sql[0][-1].tokens
+#         total_columns = []
+#         for token in columns:
+#             if isinstance(token, sqlparse.sql.Identifier):
+#                 total_columns.append(str(token))
+#             if isinstance(token, sqlparse.sql.IdentifierList):
+#                 for sub_token in token:
+#                     if (
+#                         isinstance(sub_token, sqlparse.sql.Identifier)
+#                         and str(sub_token) != "autoincrement"
+#                     ):
+#                         total_columns.append(str(sub_token))
+#         return total_columns
+#     def get_records(self, table_page, columns):
+#         cell_pointers = self.get_cell_pointers(table_page)
+#         records = []
+#         column_count = len(columns)
+#         for pointer in cell_pointers:
+#             self.database_file.seek(pointer + table_page.offset)
+#             if table_page.page_type == 13:
+#                 total_bytes = parse_varint(self.database_file)
+#                 row_id = parse_varint(self.database_file)
+#                 record = parse_record(self.database_file, column_count)
+#                 record[0] = row_id
+#                 record = [c.decode() if isinstance(c, bytes) else c for c in record]
+#                 record = {columns[i]: record[i] for i in range(len(columns))}
+#                 records.append(record)
+#             elif table_page.page_type == 5:
+#                 left_child_pointer = int.from_bytes(self.database_file.read(4), "big")
+#                 int_key = parse_varint(self.database_file)
+#                 records += self.get_records(
+#                     self.page_headers[left_child_pointer - 1], columns
+#                 )
+#             else:
+#                 print("NEW PAGE TYPE: " + table_page.page_type)
+#         return records
+#     def execute_sql(self, sql_statement):
+#         sql_info = self.get_sql_info(sql_statement)
+#         table = sql_info["table"]
+#         if sql_info["select"].upper() == "COUNT(*)":
+#             self.get_row_count(table)
+#             return
+#         columns = self.get_column_count(table)
+#         column_count = len(columns)
+#         table_rootpage = self.sqlite_schema_rows[table]["rootpage"]
+#         table_page = self.page_headers[table_rootpage - 1]
+#         self.database_file.seek(table_page.offset + 8)
+#         # cell_pointers = self.get_cell_pointers(table_page)
+#         # records = []
+#         # for pointer in cell_pointers:
+#         #     self.database_file.seek(pointer + table_page.offset)
+#         #     # asssume this is a leaf file
+#         #     total_bytes = parse_varint(self.database_file)
+#         #     row_id = parse_varint(self.database_file)
+#         #     record = parse_record(self.database_file, column_count)
+#         #     record[0] = row_id
+#         #     record = [c.decode() if isinstance(c, bytes) else c for c in record]
+#         #     record = {columns[i]: record[i] for i in range(len(columns))}
+#         #     records.append(record)
+#         records = self.get_records(table_page, columns)
+#         columns_of_interest = sql_info["select"].split(", ")
+#         for i, record in enumerate(records):
+#             total_row = []
+#             if sql_info["where"] is None:
+#                 for col in columns_of_interest:
+#                     total_row.append(str(record[col]))
+#             else:
+#                 #comparison = sql_info["where"].split()
+#                 comparison = sql_info["where"]
+#                 comp_col = comparison[0]
+#                 comp_val = comparison[2].replace("'", "")
+#                 # assume this is an equality comparison
+#                 if record[comp_col] == comp_val:
+#                     for col in columns_of_interest:
+#                         total_row.append(str(record[col]))
+#             if len(total_row) > 0:
+#                 print("|".join(total_row))
+# @dataclass(init=False)
+# class PageHeader:
+#     page_type: int
+#     first_free_block_start: int
+#     number_of_cells: int
+#     start_of_content_area: int
+#     fragmented_free_bytes: int
+#     offset: int
+#     @classmethod
+#     def parse_from(cls, database_file, offset):
+#         """
+#         Parses a page header as mentioned here: https://www.sqlite.org/fileformat2.html#b_tree_pages
+#         """
+#         instance = cls()
+#         instance.offset = offset
+#         instance.page_type = int.from_bytes(database_file.read(1), "big")
+#         instance.first_free_block_start = int.from_bytes(database_file.read(2), "big")
+#         instance.number_of_cells = int.from_bytes(database_file.read(2), "big")
+#         instance.start_of_content_area = int.from_bytes(database_file.read(2), "big")
+#         instance.fragmented_free_bytes = int.from_bytes(database_file.read(1), "big")
+#         return instance
+# sqllite_file_parser = SqliteFileParser(database_file_path)
+# if command == ".dbinfo":
+#     with open(database_file_path, "rb") as database_file:
+#          database_file.seek(16)  # Skip the first 16 bytes of the header
+#          page_size = int.from_bytes(database_file.read(2), byteorder="big")
+#          database_file.seek(103)
+#          table_amt = int.from_bytes(database_file.read(2), byteorder="big")
+#          print(f"database page size: {page_size}\nnumber of tables: {table_amt}")
+# elif command == ".tables":
+#     print(" ".join(sqllite_file_parser.sqlite_schema_rows.keys()))
+# else:
+#     # assume this is "SELECT COUNT(*) FROM {table}
+#     sqllite_file_parser.execute_sql(command)
+
 import sys
 from dataclasses import dataclass
 import sqlparse
@@ -500,7 +704,6 @@ class SqliteFileParser:
             self.database_file, self.get_cell_pointers(self.page_headers[0])
         )
     def get_cell_pointers(self, page_header):
-        #self.database_file.seek(page_header.offset + 8)
         additional_offset = 4 if page_header.page_type in (2, 5) else 0
         self.database_file.seek(page_header.offset + 8 + additional_offset)
         return [
@@ -524,7 +727,8 @@ class SqliteFileParser:
             rowid = parse_varint(database_file)
             record = parse_record(database_file, 5)
             # Table contains columns: type, name, tbl_name, rootpage, sql
-            sqlite_schema_rows[record[2].decode()] = {
+            #sqlite_schema_rows[record[2].decode()] = {
+            sqlite_schema_rows[record[1].decode()] = {
                 "type": record[0].decode(),
                 "name": record[1].decode(),
                 "tbl_name": record[2].decode(),
@@ -532,9 +736,13 @@ class SqliteFileParser:
                 "sql": record[4].decode(),
             }
         return sqlite_schema_rows
-    def get_row_count(self, table):
-        table_rootpage = self.sqlite_schema_rows[table]["rootpage"]
+    #def get_row_count(self, table):
+     #   table_rootpage = self.sqlite_schema_rows[table]["rootpage"]
+    def get_row_count(self, cell_key):
+        table_rootpage = self.sqlite_schema_rows[cell_key]["rootpage"]
         table_page = self.page_headers[table_rootpage - 1]
+        columns = self.get_column_count(cell_key)
+        records = self.get_records(table_page, columns)
         """
         self.database_file.seek(table_page.offset + 8)
         cell_pointers = self.get_cell_pointers(table_page)
@@ -542,7 +750,8 @@ class SqliteFileParser:
             self.database_file.seek(pointer + table_page.offset)
             print(self.database_file.read(30))
         """
-        print(table_page.number_of_cells)
+        #print(table_page.number_of_cells)
+        print(len(records))
     def get_sql_info(self, sql_statement):
         # separate out select, and where clause
         # get: table, columns of interest, and table
@@ -563,20 +772,21 @@ class SqliteFileParser:
             if isinstance(token, sqlparse.sql.Where):
                 for where_token in token.tokens:
                     if isinstance(where_token, sqlparse.sql.Comparison):
-                        #where = str(where_token)
                         for comp_token in where_token.tokens:
                             if str(comp_token) != " ":
                                 where.append(str(comp_token))
                             # if comp_token != sqlparse.sql.Whitespace:
                             #    where.append(str(comp_token))
-        #return {"select": columns, "table": table, "where": where}
         return {"select": columns, "table": table, "where": where if where else None}
-    def get_column_count(self, table):
-        create_sql = sqlparse.parse(self.sqlite_schema_rows[table]["sql"])
+    #def get_column_count(self, table):
+     #   create_sql = sqlparse.parse(self.sqlite_schema_rows[table]["sql"])
+    def get_column_count(self, cell_key):
+        create_sql = sqlparse.parse(self.sqlite_schema_rows[cell_key]["sql"])
         columns = create_sql[0][-1].tokens
         total_columns = []
         for token in columns:
-            if isinstance(token, sqlparse.sql.Identifier):
+     #       if isinstance(token, sqlparse.sql.Identifier):
+            if isinstance(token, sqlparse.sql.Identifier) or str(token) == "domain":
                 total_columns.append(str(token))
             if isinstance(token, sqlparse.sql.IdentifierList):
                 for sub_token in token:
@@ -586,7 +796,92 @@ class SqliteFileParser:
                     ):
                         total_columns.append(str(sub_token))
         return total_columns
+    def get_record_with_id(self, table_page, value, columns):
+        cell_pointers = self.get_cell_pointers(table_page)
+        records = []
+        column_count = len(columns)
+        prev_index, prev_pointer = None, None
+        for pointer in cell_pointers:
+            self.database_file.seek(pointer + table_page.offset)
+            if table_page.page_type == 13:
+                # leaf node
+                total_bytes = parse_varint(self.database_file)
+                row_id = parse_varint(self.database_file)
+                record = parse_record(self.database_file, column_count)
+                if row_id == value:
+                    record[0] = row_id
+                    record = [c.decode() if isinstance(c, bytes) else c for c in record]
+                    record = {columns[i]: record[i] for i in range(len(columns))}
+                    return record
+            elif table_page.page_type == 5:
+                left_child_pointer = int.from_bytes(self.database_file.read(4), "big")
+                int_key = parse_varint(self.database_file)
+                if prev_index is None:
+                    if value < int_key:
+                        return self.get_record_with_id(
+                            self.page_headers[left_child_pointer - 1], value, columns
+                        )
+                elif prev_index <= value and value <= int_key:
+                    return self.get_record_with_id(
+                        self.page_headers[left_child_pointer - 1], value, columns
+                    )
+                prev_index, prev_pointer = int_key, left_child_pointer
+        if table_page.page_type == 5 and value >= prev_index:
+            return self.get_record_with_id(
+                self.page_headers[table_page.right_pointer - 1], value, columns
+            )
+    def get_records_with_index(self, table_page, value, columns):
+        cell_pointers = self.get_cell_pointers(table_page)
+        records = []
+        column_count = len(columns)
+        prev_index, prev_pointer = None, None
+        for pointer in cell_pointers:
+            self.database_file.seek(pointer + table_page.offset)
+            if table_page.page_type == 13:
+                total_bytes = parse_varint(self.database_file)
+                row_id = parse_varint(self.database_file)
+                record = parse_record(self.database_file, column_count)
+                record[0] = row_id
+                record = [c.decode() if isinstance(c, bytes) else c for c in record]
+                record = {columns[i]: record[i] for i in range(len(columns))}
+                records.append(record)
+            elif table_page.page_type == 5:
+                left_child_pointer = int.from_bytes(self.database_file.read(4), "big")
+                int_key = parse_varint(self.database_file)
+                records += self.get_records(
+                    self.page_headers[left_child_pointer - 1], columns
+                )
+            elif table_page.page_type == 2:
+                left_child_pointer = int.from_bytes(self.database_file.read(4), "big")
+                total_bytes = parse_varint(self.database_file)
+                key, row_id = parse_record(self.database_file, 2)
+                key = key.decode() if key is not None else None
+                if key is not None and key == value:
+                    records.append(row_id)
+                if prev_index is None:
+                    if key is not None and value < key:
+                        records += self.get_records_with_index(
+                            self.page_headers[left_child_pointer - 1], value, columns
+                        )
+                elif prev_index <= value and key is not None and value <= key:
+                    records += self.get_records_with_index(
+                        self.page_headers[left_child_pointer - 1], value, columns
+                    )
+                prev_index, prev_pointer = key, left_child_pointer
+            elif table_page.page_type == 10:
+                total_bytes = parse_varint(self.database_file)
+                key, row_id = parse_record(self.database_file, 2)
+                if key.decode() == value:
+                    records.append(row_id)
+            else:
+                print("NEW PAGE TYPE: " + str(table_page.page_type))
+        if table_page.page_type == 2 and value >= prev_index:
+            records += self.get_records_with_index(
+                self.page_headers[table_page.right_pointer - 1], value, columns
+            )
+        return records
     def get_records(self, table_page, columns):
+        # 1910 pages for companies
         cell_pointers = self.get_cell_pointers(table_page)
         records = []
         column_count = len(columns)
@@ -606,33 +901,56 @@ class SqliteFileParser:
                 records += self.get_records(
                     self.page_headers[left_child_pointer - 1], columns
                 )
+            elif table_page.page_type == 2:
+                left_child_pointer = int.from_bytes(self.database_file.read(4), "big")
+                total_bytes = parse_varint(self.database_file)
+                record = parse_record(self.database_file, 2)
+                # records += self.get_records(self.page_headers[left_child_pointer - 1], columns)
+            elif table_page.page_type == 10:
+                total_bytes = parse_varint(self.database_file)
+                record = parse_record(self.database_file, 2)
+                # [b'mozambique', 6161476]
+                self.database_file.seek(record[1])
+                record = parse_record(self.database_file, column_count)
             else:
                 print("NEW PAGE TYPE: " + table_page.page_type)
+                print("NEW PAGE TYPE: " + str(table_page.page_type))
+        if table_page.page_type in (2, 5):
+            records += self.get_records(
+                self.page_headers[table_page.right_pointer - 1], columns
+            )
         return records
     def execute_sql(self, sql_statement):
+        # print(self.sqlite_schema_rows)
         sql_info = self.get_sql_info(sql_statement)
         table = sql_info["table"]
         if sql_info["select"].upper() == "COUNT(*)":
             self.get_row_count(table)
             return
         columns = self.get_column_count(table)
-        column_count = len(columns)
-        table_rootpage = self.sqlite_schema_rows[table]["rootpage"]
-        table_page = self.page_headers[table_rootpage - 1]
-        self.database_file.seek(table_page.offset + 8)
-        # cell_pointers = self.get_cell_pointers(table_page)
-        # records = []
-        # for pointer in cell_pointers:
-        #     self.database_file.seek(pointer + table_page.offset)
-        #     # asssume this is a leaf file
-        #     total_bytes = parse_varint(self.database_file)
-        #     row_id = parse_varint(self.database_file)
-        #     record = parse_record(self.database_file, column_count)
-        #     record[0] = row_id
-        #     record = [c.decode() if isinstance(c, bytes) else c for c in record]
-        #     record = {columns[i]: record[i] for i in range(len(columns))}
-        #     records.append(record)
-        records = self.get_records(table_page, columns)
+        #column_count = len(columns)
+        #table_rootpage = self.sqlite_schema_rows[table]["rootpage"]
+        #table_page = self.page_headers[table_rootpage - 1]
+        #self.database_file.seek(table_page.offset + 8)
+        #records = self.get_records(table_page, columns)
+        # if False:
+        if sql_info["where"] and sql_info["where"][0] == "country":
+            index_root_page = self.sqlite_schema_rows["idx_companies_country"][
+                "rootpage"
+            ]
+            index_page = self.page_headers[index_root_page - 1]
+            table_rootpage = self.sqlite_schema_rows[table]["rootpage"]
+            table_page = self.page_headers[table_rootpage - 1]
+            record_ids = self.get_records_with_index(
+                index_page, sql_info["where"][2].replace("'", ""), columns
+            )
+            records = []
+            for record_id in record_ids:
+                records.append(self.get_record_with_id(table_page, record_id, columns))
+        else:
+            table_rootpage = self.sqlite_schema_rows[table]["rootpage"]
+            table_page = self.page_headers[table_rootpage - 1]
+            records = self.get_records(table_page, columns)
         columns_of_interest = sql_info["select"].split(", ")
         for i, record in enumerate(records):
             total_row = []
@@ -640,7 +958,6 @@ class SqliteFileParser:
                 for col in columns_of_interest:
                     total_row.append(str(record[col]))
             else:
-                #comparison = sql_info["where"].split()
                 comparison = sql_info["where"]
                 comp_col = comparison[0]
                 comp_val = comparison[2].replace("'", "")
@@ -658,6 +975,7 @@ class PageHeader:
     start_of_content_area: int
     fragmented_free_bytes: int
     offset: int
+    right_pointer: int
     @classmethod
     def parse_from(cls, database_file, offset):
         """
@@ -670,17 +988,31 @@ class PageHeader:
         instance.number_of_cells = int.from_bytes(database_file.read(2), "big")
         instance.start_of_content_area = int.from_bytes(database_file.read(2), "big")
         instance.fragmented_free_bytes = int.from_bytes(database_file.read(1), "big")
+        if instance.page_type in (2, 5):
+            instance.right_pointer = int.from_bytes(database_file.read(4), "big")
+        else:
+            instance.right_pointer = None
         return instance
 sqllite_file_parser = SqliteFileParser(database_file_path)
 if command == ".dbinfo":
-    with open(database_file_path, "rb") as database_file:
-         database_file.seek(16)  # Skip the first 16 bytes of the header
-         page_size = int.from_bytes(database_file.read(2), byteorder="big")
-         database_file.seek(103)
-         table_amt = int.from_bytes(database_file.read(2), byteorder="big")
-         print(f"database page size: {page_size}\nnumber of tables: {table_amt}")
+    print("Logs from your program will appear here!")
+    #print(f"number of tables: {len(sqllite_file_parser.sqlite_schema_rows)}")
+    table_count = len(
+        [
+            table
+            for table in sqllite_file_parser.sqlite_schema_rows
+            if sqllite_file_parser.sqlite_schema_rows[table]["type"] == "table"
+        ]
+    )
+    print(f"number of tables: {table_count}")
 elif command == ".tables":
-    print(" ".join(sqllite_file_parser.sqlite_schema_rows.keys()))
+    #print(" ".join(sqllite_file_parser.sqlite_schema_rows.keys()))
+    tables = [
+        sqllite_file_parser.sqlite_schema_rows[table]["tbl_name"]
+        for table in sqllite_file_parser.sqlite_schema_rows
+        if sqllite_file_parser.sqlite_schema_rows[table]["type"] == "table"
+    ]
+    print(" ".join(tables))
 else:
     # assume this is "SELECT COUNT(*) FROM {table}
     sqllite_file_parser.execute_sql(command)
